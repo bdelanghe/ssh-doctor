@@ -1,62 +1,76 @@
-#!/bin/sh
+#!/bin/bash
 
 KNOWN_DOMAINS=()
 
 ssh_installed(){
-	local version=$(ssh -V 2>&1)
+	local version
+	version=$(ssh -V 2>&1)
 	if [[ $version ]]; then
-		echo "ssh version: $version\n"
+		printf 'ssh version:%s\n' "$version" 
 	else
-		echo "ssh not installed\n"
+		printf "ssh not installed\n"
 	fi
 }
 ssh_agent_running(){
-	local agents=$(pgrep ssh-agent)
+	local agents
+	agents=$(pgrep ssh-agent)
 	if [[ $agents ]]; then
-		echo "current ssh-agents:\n$agents\n"
+		printf 'current ssh-agents:\n%s\n' "$agents"
 	else
-		echo 'unable to find ssh-agent: please run "eval $(ssh-agent)"\n'
+		# shellcheck disable=SC2016
+		printf 'unable to find ssh-agent: please run "eval $(ssh-agent)"\n'
 	fi
 }
 ssh_agent_identities(){
-	local identities=$(ssh-add -l 2>&1)
+	local identities
+	identities=$(ssh-add -l 2>&1)
 	if [[ $identities != "The agent has no identities." ]]; then
-		echo "current ssh-identities:\n$identities\n"
+		printf 'current ssh-identities:\n%s\n' "$identities"
 	else
-		echo 'agent has no identities: please add with "ssh-add ~/.ssh/{ssh-key-name}"\n'
+		# shellcheck disable=SC2016
+		printf 'agent has no identities: please add with "ssh-add ~/.ssh/{ssh-key-name}"\n'
 	fi
 }
 ssh_known_hosts(){
-	local host_file=~/.ssh/known_hosts
-	local hosts=$(ssh-keygen -lf $host_file)
+	local host_file
+	local hosts
+	host_file=~/.ssh/known_hosts
+	hosts=$(ssh-keygen -lf $host_file)
 	if [[ $hosts ]]; then
 		for host in $hosts
 		do
-			local arr=($(echo $host))
-			local domain=${arr[3]}
-			KNOWN_DOMAINS+=($domain)
+			local array
+			local domain
+			mapfile -t array < <(echo "$host")
+			domain=${array[3]}
+			KNOWN_DOMAINS+=("$domain")
 		done		
-		echo "current known hosts:\n$KNOWN_DOMAINS\n"
+		printf "current known hosts:\n"
+		for known in "${KNOWN_DOMAINS[@]}"
+		do
+			echo "$known"
+		done
 	else
-		echo 'known hosts file is empty: please add with: "ssh-keyscan {target-host} >> ~/.ssh/known_hosts"\n'
+		printf 'known hosts file is empty: please add with: "ssh-keyscan {target-host} >> ~/.ssh/known_hosts"\n'
 	fi
 }
 ssh_keys_pub(){
-       local keys=$(find ~/.ssh -name "*.pub" -depth 1)
+       local keys
+	   keys=$(find ~/.ssh -name "*.pub" -depth 1)
        if [[ $keys ]]; then
-               echo "current public keys:\n$keys\n"
+               printf 'current public keys:\n%s\n' "$keys"
        else
                echo 'no keys public keys found: please create a new one with "ssh-keygen -t ed25519 -b 4096 -C "{username@emaildomain.com}" -f {ssh-key-name}"'
        fi
 }
 ssh_check_knownhost_connect(){
-	if [[ $KNOWN_DOMAINS ]]; then
+	if [[ ${KNOWN_DOMAINS[0]} ]]; then
 		echo 'connections for knownhost:'
 		for domain in $KNOWN_DOMAINS
 		do
-			ssh -q $domain exit > /dev/null; retcode=$?
+			ssh -q "$domain" exit > /dev/null; retcode=$?
 			if [[ $retcode ]]; then
-				ssh -ql git $domain exit > /dev/null; retcode=$?
+				ssh -ql git "$domain" exit > /dev/null; retcode=$?
 				if [[ $retcode != '0' ]]; then
 					echo "$domain - returned error code $retcode"
 				else
