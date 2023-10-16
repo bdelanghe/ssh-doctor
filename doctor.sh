@@ -32,26 +32,25 @@ ssh_agent_identities() {
 	fi
 }
 ssh_known_hosts() {
-	local host_file
-	local hosts
-	host_file=~/.ssh/known_hosts
-	hosts=$(ssh-keygen -lf $host_file)
-	if [[ $hosts ]]; then
-		for host in $hosts; do
-			local array
-			local domain
-			mapfile -t array < <(echo "$host")
-			domain=${array[3]}
-			KNOWN_DOMAINS+=("$domain")
-		done
-		printf "current known hosts:\n"
-		for known in "${KNOWN_DOMAINS[@]}"; do
-			echo "$known"
-		done
-	else
-		printf 'known hosts file is empty: please add with: "ssh-keyscan {target-host} >> ~/.ssh/known_hosts"\n'
-	fi
+    local host_file
+    local line
+    host_file=~/.ssh/known_hosts
+    if [[ -f $host_file ]]; then
+        while IFS= read -r line; do
+            local domain
+            domain=$(echo "$line" | awk '{print $NF}')
+            KNOWN_DOMAINS+=("$domain")
+        done < <(ssh-keygen -lf "$host_file")
+        
+        printf "current known hosts:\n"
+        for known in "${KNOWN_DOMAINS[@]}"; do
+            echo "$known"
+        done
+    else
+        printf 'known hosts file is empty: please add with: "ssh-keyscan {target-host} >> ~/.ssh/known_hosts"\n'
+    fi
 }
+
 ssh_keys_pub() {
 	local keys
 	keys=$(find ~/.ssh -name "*.pub" -depth 1)
