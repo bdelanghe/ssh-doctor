@@ -37,20 +37,25 @@ ssh_known_hosts() {
     host_file=~/.ssh/known_hosts
     if [[ -f $host_file ]]; then
         while IFS= read -r line; do
-            local domain
-            domain=$(echo "$line" | awk '{print $NF}')
-            KNOWN_DOMAINS+=("$domain")
-        done < <(ssh-keygen -lf "$host_file")
+            # Exclude lines that start with '|', which indicates a hashed host
+            if [[ $line != \|* ]]; then
+                local domain
+                # Split by space and get the first field which is the host name.
+                domain=$(echo "$line" | awk '{print $1}')
+                if ! [[ "${KNOWN_DOMAINS[@]}" =~ "${domain}" ]]; then
+                    KNOWN_DOMAINS+=("$domain")
+                fi
+            fi
+        done < "$host_file"
         
         printf "current known hosts:\n"
-        for known in "${KNOWN_DOMAINS[@]}"; do
-            echo "$known"
-        done
+        IFS=$'\n' sorted=($(sort <<<"${KNOWN_DOMAINS[*]}"))
+        unset IFS
+        printf "%s\n" "${sorted[@]}"
     else
         printf 'known hosts file is empty: please add with: "ssh-keyscan {target-host} >> ~/.ssh/known_hosts"\n'
     fi
 }
-
 ssh_keys_pub() {
 	local keys
 	keys=$(find ~/.ssh -name "*.pub" -depth 1)
@@ -63,7 +68,7 @@ ssh_keys_pub() {
 ssh_check_knownhost_connect() {
 	if [[ ${KNOWN_DOMAINS[0]} ]]; then
 		echo 'connections for knownhost:'
-		for domain in $KNOWN_DOMAINS; do
+		for domain in "${KNOWN_DOMAINS[@]}"; do
 			ssh -q "$domain" exit >/dev/null
 			retcode=$?
 			if [[ $retcode ]]; then
@@ -86,4 +91,4 @@ ssh_installed && ssh_agent_running
 ssh_known_hosts
 ssh_keys_pub
 ssh_agent_identities
-ssh_check_knownhost_connect
+# ssh_check_knownhost_connect
