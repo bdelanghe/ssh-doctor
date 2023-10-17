@@ -2,6 +2,85 @@
 
 KNOWN_DOMAINS=()
 
+get_startup_file() {
+    local default_shell
+    default_shell=$(basename "$SHELL")
+
+    # Print the default shell to stderr
+    echo "Default shell: $default_shell" >&2
+
+    case "$default_shell" in
+        bash)
+            # Prefer BASH env variable, else default to ~/.bashrc
+            echo "${BASH:-~/.bashrc}"
+            ;;
+        zsh)
+            # Prefer ZSH env variable for oh-my-zsh setups, else default to ~/.zshrc
+            echo "${ZSH:-~/.zshrc}"
+            ;;
+        # Add checks for other shells if needed
+        # ksh) echo ~/.kshrc ;;
+        # fish) echo ~/.config/fish/config.fish ;;
+        *) return 1 ;;
+    esac
+}
+
+file_exists_and_readable() {
+    local file="$1"
+    # Expand tilde and check if file exists and is readable
+    if [[ -r "${file/#\~/$HOME}" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+check_ssh_agent_startup() {
+    local file_to_check
+    file_to_check=$(get_startup_file)
+    # Check if the shell is unsupported
+    if [[ -z "$file_to_check" ]]; then
+        echo "Unsupported shell."
+        return 1
+    fi
+
+    # Use the new function to check if the file exists and is readable
+    if ! file_exists_and_readable "$file_to_check"; then
+        echo "$file_to_check does not exist or is not readable."
+        return 1
+    fi
+
+    # Check if the ssh-agent initialization is in the file
+    if grep -q "eval \$(ssh-agent" "$file_to_check"; then
+        printf "ssh-agent initialization found in %s\n" "$file_to_check"
+        return 0
+    else
+        printf "ssh-agent initialization not found in %s.\n" "$file_to_check"
+        return 1
+    fi
+}
+
+
+add_ssh_agent_startup() {
+    local file_to_check
+    file_to_check=$(get_startup_file)
+    if [[ $? -ne 0 ]]; then
+        echo "Unsupported shell."
+        return 1
+    fi
+
+    if [[ ! -r $file_to_check ]]; then
+        touch "$file_to_check"
+        echo "$file_to_check created."
+    fi
+
+    echo "eval \$(ssh-agent)" >> "$file_to_check"
+    echo "ssh-agent initialization added to $file_to_check"
+}
+
+# Usage
+check_ssh_agent_startup || add_ssh_agent_startup
+
 ssh_installed() {
 	local version
 	version=$(ssh -V 2>&1)
@@ -87,6 +166,7 @@ ssh_check_knownhost_connect() {
 		echo "connect test: no know hosts to test"
 	fi
 }
+check_ssh_agent_startup || add_ssh_agent_startup
 ssh_installed && ssh_agent_running
 ssh_known_hosts
 ssh_keys_pub
